@@ -196,7 +196,7 @@ void free_ctx(ctx_t *ctx) {
 }
 
 int init_ctx(ctx_t *ctx, opts_t *opts) {
-	TODO("lab3");
+	//TODO("lab3");
 	MPI_Comm_size(MPI_COMM_WORLD, &ctx->numprocs);
 	MPI_Comm_rank(MPI_COMM_WORLD, &ctx->rank);
 
@@ -214,34 +214,42 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
 	ctx->isperiodic[1] = 1;
 	ctx->reorder = 0;
 	grid_t *new_grid = NULL;
+	image_t *image;
 
 	/* TODO: Créer un "2D cartesian communicator" */
+	MPI_Cart_create(MPI_COMM_WORLD, 2, ctx->dim, ctx->isperiodic, ctx->reorder);
 
 	/*
 	 * TODO: Le processus rank=0 charge l'image du disque
 	 * et transfert chaque section aux autres processus
 	 */
+	if (ctx->rank == 0) {
+		/* Charger l'image d'entrée */
+		image = load_png(opts->input);
+		if (image == NULL)
+			goto err;
+		/* Initialisation de la grid avec le canal rouge */
+		ctx->global_grid = grid_from_image(image, CHAN_RED);
 
-	/* Charger l'image d'entrée */
-	image_t *image = load_png(opts->input);
-	if (image == NULL)
-		goto err;
+		/* La grid a été normalisée à 1, mutiplication par MAX_TEMP */
+		grid_multiply(ctx->global_grid, MAX_TEMP);
 
-	/* Initialisation de la grid avec le canal rouge */
-	ctx->global_grid = grid_from_image(image, CHAN_RED);
+		/* Décomposition 2D */
+		ctx->cart = make_cart2d(ctx->global_grid->width,
+				ctx->global_grid->height, opts->dimx, opts->dimy);
+		cart2d_grid_split(ctx->cart, ctx->global_grid);
+		MPI_Send
+	}
 
-	/* La grid a été normalisée à 1, mutiplication par MAX_TEMP */
-	grid_multiply(ctx->global_grid, MAX_TEMP);
+	//MPI_Scatter(image->rows, , MPI_BYTE, image->rows, , MPI_BYTE, 0, MPI_COMM_WORLD);
 
-	/* Décomposition 2D */
-	ctx->cart = make_cart2d(ctx->global_grid->width,
-			ctx->global_grid->height, opts->dimx, opts->dimy);
-	cart2d_grid_split(ctx->cart, ctx->global_grid);
+	
 
 	/*
 	 * TODO: Envoyer les dimensions de la grid dimensions et les données
 	 * Comment traiter le cas de rank=0 ?
 	 */
+	
 
 	/*
 	 * TODO: Recevoir les dimensions de la grid
