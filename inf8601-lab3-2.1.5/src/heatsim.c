@@ -272,6 +272,7 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
 		// Get the grid for rank 0 and stock it in new_grid
 		grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
 		new_grid = make_grid(grid->width, grid->height, 0);
+		grid_copy(grid, new_grid);
 	} else {
 		/*
 	 	 * TODO: Recevoir les dimensions de la grid
