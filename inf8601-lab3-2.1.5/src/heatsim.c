@@ -263,7 +263,7 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
 			rank_tag = rank * 3;
 			res = MPI_Isend(&grid->width, 1, MPI_INTEGER, rank, rank_tag, ctx->comm2d, &req[(rank - 1) * 3]);
 			res &= MPI_Isend(&grid->height, 1, MPI_INTEGER, rank, rank_tag + 1, ctx->comm2d, &req[(rank - 1) * 3 + 1]);
-			res &= MPI_Isend(grid->data, grid->width * grid->height, MPI_INTEGER, rank, rank_tag + 2, ctx->comm2d, &req[(rank - 1) * 3 + 2]);
+			res &= MPI_Isend(grid->dbl, grid->width * grid->height, MPI_DOUBLE, rank, rank_tag + 2, ctx->comm2d, &req[(rank - 1) * 3 + 2]);
 			if (res != MPI_SUCCESS)
 				goto err;
 		}
@@ -289,7 +289,7 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
 		MPI_Waitall(2, requests, status);
 		new_grid = make_grid(width, height, 0);
 
-		res &= MPI_Irecv(new_grid->data, width * height, MPI_INTEGER, 0, rank_tag + 2, ctx->comm2d, &requests[2]);
+		res &= MPI_Irecv(new_grid->dbl, width * height, MPI_DOUBLE, 0, rank_tag + 2, ctx->comm2d, &requests[2]);
 		MPI_Wait(&requests[2], &status[2]);
 	}
 
@@ -305,7 +305,7 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
 	free_grid(new_grid);
 
 	/* TODO: Créer un type vector pour échanger les colonnes */
-	MPI_Type_vector(ctx->curr_grid->height, 1, ctx->curr_grid->width, MPI_INTEGER, &ctx->vector);
+	MPI_Type_vector(ctx->curr_grid->height, 1, ctx->curr_grid->width, MPI_DOUBLE, &ctx->vector);
 	MPI_Type_commit(&ctx->vector);
 
 	return 0;
@@ -329,7 +329,7 @@ void exchng2d(ctx_t *ctx) {
 	grid_t *grid = ctx->next_grid;
 	int width = grid->pw;
 	int height = grid->ph;
-	int *data = grid->data;
+	double *data = grid->dbl;
 	MPI_Comm comm = ctx->comm2d;
 	int north_peer = ctx->north_peer;
 	int south_peer = ctx->south_peer;
@@ -338,24 +338,24 @@ void exchng2d(ctx_t *ctx) {
 	MPI_Status status[4];
 
 	//Calcul des offsets
-    int *offset_send_north = data + width;
-    int *offset_recv_north = data;
+    double *offset_send_north = data + width;
+    double *offset_recv_north = data;
 
-    int *offset_send_south = data + width * (height -  2);
-    int *offset_recv_south = data + width * (height -  1);
+    double *offset_send_south = data + width * (height -  2);
+    double *offset_recv_south = data + width * (height -  1);
 
-	int *offset_send_east = data + width - 2;
-    int *offset_recv_east = data + width + 1;
+	double *offset_send_east = data + width - 2;
+    double *offset_recv_east = data + width + 1;
 
-    int *offset_send_west = data + 1;
-    int *offset_recv_west = data;
+    double *offset_send_west = data + 1;
+    double *offset_recv_west = data;
 
 	// North to south
-	MPI_Sendrecv(offset_send_south, width, MPI_INTEGER, south_peer, 0,
-		offset_recv_south, width, MPI_INTEGER, north_peer, 0, comm, &status[0]);
+	MPI_Sendrecv(offset_send_south, width, MPI_DOUBLE, south_peer, 0,
+		offset_recv_south, width, MPI_DOUBLE, north_peer, 0, comm, &status[0]);
 	// South to north
-	MPI_Sendrecv(offset_send_north, width, MPI_INTEGER, north_peer, 1,
-		offset_recv_north, width, MPI_INTEGER, south_peer, 1, comm, &status[1]);
+	MPI_Sendrecv(offset_send_north, width, MPI_DOUBLE, north_peer, 1,
+		offset_recv_north, width, MPI_DOUBLE, south_peer, 1, comm, &status[1]);
 	// West to east
 	MPI_Sendrecv(offset_send_east, 1, ctx->vector, east_peer, 2,
 		offset_recv_east, 1, ctx->vector, west_peer, 2, comm, &status[2]);
@@ -387,13 +387,13 @@ int gather_result(ctx_t *ctx, opts_t *opts) {
 		for (rank = 1; rank < ctx->numprocs; rank++) {
 			MPI_Cart_coords(ctx->comm2d, rank, DIM_2D, coords);
 			grid_t *grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
-			MPI_Irecv(grid->data, grid->width * grid->height, MPI_INTEGER, rank, 0, ctx->comm2d, &req[rank-1]);
+			MPI_Irecv(grid->dbl, grid->width * grid->height, MPI_DOUBLE, rank, 0, ctx->comm2d, &req[rank-1]);
 		}
 		MPI_Waitall(ctx->numprocs - 1, req, status);
 		/* now we can merge all data blocks, reuse global_grid */
 		cart2d_grid_merge(ctx->cart, ctx->global_grid);
 	} else {
-		res = MPI_Send(local_grid->data, local_grid->width * local_grid->height, MPI_INTEGER, 0, 0, ctx->comm2d);
+		res = MPI_Send(local_grid->dbl, local_grid->width * local_grid->height, MPI_DOUBLE, 0, 0, ctx->comm2d);
 		if (res != MPI_SUCCESS)
 			goto err;
 	}
