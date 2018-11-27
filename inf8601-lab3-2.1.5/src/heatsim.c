@@ -305,7 +305,7 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
 	free_grid(new_grid);
 
 	/* TODO: Créer un type vector pour échanger les colonnes */
-	MPI_Type_vector(ctx->curr_grid->height, 1, ctx->curr_grid->width, MPI_DOUBLE, &ctx->vector);
+	MPI_Type_vector(ctx->curr_grid->height, 1, ctx->curr_grid->pw, MPI_DOUBLE, &ctx->vector);
 	MPI_Type_commit(&ctx->vector);
 
 	return 0;
@@ -326,9 +326,10 @@ void exchng2d(ctx_t *ctx) {
 	 *  TODO: Échanger les bordures avec les voisins
 	 * 4 échanges doivent etre effectués
 	 */
-	grid_t *grid = ctx->next_grid;
-	int width = grid->pw;
-	int height = grid->ph;
+	grid_t *grid = ctx->curr_grid;
+	int padding_width = grid->pw;
+	int padding_height = grid->ph;
+	int width = grid->width;
 	double *data = grid->dbl;
 	MPI_Comm comm = ctx->comm2d;
 	int north_peer = ctx->north_peer;
@@ -338,30 +339,30 @@ void exchng2d(ctx_t *ctx) {
 	MPI_Status status[4];
 
 	//Calcul des offsets
-    double *offset_send_north = data + width;
-    double *offset_recv_north = data;
+    double *offset_send_north = data + padding_width + 1;
+    double *offset_recv_north = data + 1;
 
-    double *offset_send_south = data + width * (height -  2);
-    double *offset_recv_south = data + width * (height -  1);
+    double *offset_send_south = data + padding_width * (padding_height -  2) + 1;
+    double *offset_recv_south = data + padding_width * (padding_height -  1) + 1;
 
-	double *offset_send_east = data + width - 2;
-    double *offset_recv_east = data + width + 1;
+	double *offset_send_east = offset_send_north + width - 1;
+    double *offset_recv_east = offset_send_east + 1;
 
-    double *offset_send_west = data + 1;
-    double *offset_recv_west = data;
+    double *offset_send_west = offset_send_north;
+    double *offset_recv_west = offset_send_west - 1;
 
 	// North to south
 	MPI_Sendrecv(offset_send_south, width, MPI_DOUBLE, south_peer, 0,
-		offset_recv_south, width, MPI_DOUBLE, north_peer, 0, comm, &status[0]);
+		offset_recv_north, width, MPI_DOUBLE, north_peer, 0, comm, &status[0]);
 	// South to north
 	MPI_Sendrecv(offset_send_north, width, MPI_DOUBLE, north_peer, 1,
-		offset_recv_north, width, MPI_DOUBLE, south_peer, 1, comm, &status[1]);
+		offset_recv_south, width, MPI_DOUBLE, south_peer, 1, comm, &status[1]);
 	// West to east
 	MPI_Sendrecv(offset_send_east, 1, ctx->vector, east_peer, 2,
-		offset_recv_east, 1, ctx->vector, west_peer, 2, comm, &status[2]);
+		offset_recv_west, 1, ctx->vector, west_peer, 2, comm, &status[2]);
 	// East to west
 	MPI_Sendrecv(offset_send_west, 1, ctx->vector, west_peer, 3,
-		offset_recv_west, 1, ctx->vector, east_peer, 3, comm, &status[3]);
+		offset_recv_east, 1, ctx->vector, east_peer, 3, comm, &status[3]);
 }
 
 int gather_result(ctx_t *ctx, opts_t *opts) {
